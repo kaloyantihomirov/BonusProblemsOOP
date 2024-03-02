@@ -1,2 +1,2 @@
 # BonusProblemsOOP
- The solutions of the bonus problems for the OOP practicum course in FMI @ SU
+ The solutions of the bonus problems for the OOP practicum course at FMI @ SU.
