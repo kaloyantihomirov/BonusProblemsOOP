@@ -31,22 +31,12 @@ void printMovie(const Movie& m)
 
 bool checkIfCouldNotOpenFile(std::ifstream& file)
 {
-    if (!file.is_open())
-    {      
-        return true;
-    }
-
-    return false;
+    return !file.is_open();
 }
 
 bool checkIfEmptyFile(std::ifstream& file)
 {
-    if (file.peek() == std::ifstream::traits_type::eof())
-    {
-        return true;
-    }
-
-    return false;
+    return file.peek() == std::ifstream::traits_type::eof();
 }
 
 SafeAnswer validatefstream(std::ifstream& fstream)
@@ -188,16 +178,11 @@ SafeAnswer getMoviePrice(const char* catalogName, const char* searchedMovieName)
     return sa;
 }
 
-//в условието не е описано какво точно да прави тази функция, затова
-//промених името ѝ (беше readMovie(...)), за да съответства на функция, която аз бих си създал
-Movie createMovie(const char movieName[MOVIE_NAME_MAX_LENGTH], unsigned moviePrice)
+Movie readMovie(std::ifstream& file)
 {
-    Movie m;
-
-    strcpy_s(m.name, movieName);
-    m.price = moviePrice;
-
-    return m;
+    Movie movie;
+    file >> movie.name >> movie.price;
+    return movie;
 }
 
 
@@ -212,15 +197,9 @@ Movie* saveMoviesInArray(std::ifstream& file, int numberOfMovies)
     Movie* movies = new Movie[numberOfMovies];
     int i = 0;
 
-    while (file >> movieName >> moviePrice)
+    while (i < numberOfMovies)
     {
-        Movie currMovie = createMovie(movieName, moviePrice);
-
-        //тази проверка е излишна, но компилаторът ревеше с "buffer overrun warning"
-        if (i < numberOfMovies) 
-        {
-            movies[i++] = currMovie;
-        }
+        movies[i++] = readMovie(file);
     }
 
     return movies;
@@ -279,13 +258,15 @@ void sortMoviesByPriceAscending(Movie* movies, int count)
 
 ErrorInCatalog saveMoviesSorted(const char* catalogName, const char* catalogSortedName) 
 {
-    std::ifstream file(catalogName);
-
     SafeAnswer sa = getNumberOfMovies(catalogName);
 
-    if (sa.error != ErrorInCatalog::no_error_occurred)
+    std::ifstream file(catalogName);
+
+    SafeAnswer sa2 = validatefstream(file);
+
+    if (sa.error != ErrorInCatalog::no_error_occurred || sa2.error != ErrorInCatalog::no_error_occurred)
     {
-        return sa.error;
+        return sa.error != ErrorInCatalog::no_error_occurred ? sa2.error : sa.error;
     }
 
     unsigned numberOfMovies = sa.number;
