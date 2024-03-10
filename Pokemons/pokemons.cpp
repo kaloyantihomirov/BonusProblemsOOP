@@ -4,149 +4,266 @@
 
 namespace GlobalConstants
 {
-    const int MAX_NAME_LENGTH = 50;
-    const int MAX_TYPE_LENGTH = 40;
+	const int MAX_NAME_LENGTH = 50;
+	const int DEFAULT_POWER_VALUE = 500;
 }
 
 enum class e_Type
 {
-    NORMAL,
-    FIRE,
-    WATER,
-    GRASS,
-    ELECTRIC,
-    GHOST,
-    FLYING,
+	NORMAL,
+	FIRE,
+	WATER,
+	GRASS,
+	ELECTRIC,
+	GHOST,
+	FLYING,
+	s_number_of_values
 };
 
 struct Pokemon
 {
-    char Name[GlobalConstants::MAX_NAME_LENGTH];
+	char Name[GlobalConstants::MAX_NAME_LENGTH];
 
-    e_Type Type;
+	e_Type Type;
 
-    unsigned Power;
+	unsigned Power;
 };
 
-void printPokemon(const Pokemon& p)
+void writePokemon(const Pokemon& p, std::ostream& is)
 {
-    std::cout << "Pokemon name: " << p.Name << std::endl;
-    std::cout << "Pokemon type: " << (int)p.Type << std::endl;
-    std::cout << "Pokemon power: " << p.Power << std::endl;
+	is << p.Name << " " << (int)p.Type << " " << p.Power << std::endl;
 }
 
 Pokemon createPokenom(
-    const char * name,
-    const e_Type type, 
-    unsigned power)
+	const char* name,
+	const e_Type type,
+	int power)
 {
-    Pokemon p;
+	Pokemon p;
 
-    strcpy_s(p.Name, GlobalConstants::MAX_NAME_LENGTH, name);
-    p.Type = type;
-    p.Power = power;
+	if (strlen(name) > GlobalConstants::MAX_NAME_LENGTH)
+	{
+		std::cerr << "The name will be truncated, as we couldn't store all of the given symbols" << std::endl;
+	}
+	strcpy_s(p.Name, GlobalConstants::MAX_NAME_LENGTH, name);
 
-    return p;
+	p.Type = type;
+
+	if (power < 10 || power > 1000)
+	{
+		power = GlobalConstants::DEFAULT_POWER_VALUE;
+		std::cerr << "The given power value was not in the accepted range, so a default value of " << GlobalConstants::DEFAULT_POWER_VALUE << " was used." << std::endl;
+	}
+
+	p.Power = power;
+
+	return p;
 }
 
 Pokemon readPokemon(std::istream& is)
 {
-    Pokemon p;
+	char name[GlobalConstants::MAX_NAME_LENGTH];
+	is.getline(name, GlobalConstants::MAX_NAME_LENGTH, ' ');
 
-    int type;
+	int type, power;
+	is >> type >> power;
 
-    is >> p.Name >> type >> p.Power;
+	e_Type typeAsEnum;
 
-    p.Type = (e_Type)type;
+	if (type < 0 || type >= (int)e_Type::s_number_of_values)
+	{
+		std::cerr << "The provided type was not correct, so the default 0 was used." << std::endl;
+		typeAsEnum = (e_Type)0;
+	}
+	else
+	{
+		typeAsEnum = (e_Type)type;
+	}
 
-    return p;
+	return createPokenom(name, typeAsEnum, power);
 }
 
 void writePokenomToBinary(const Pokemon& p, std::ostream& of)
 {
-    of.write((const char*)&p, sizeof(p));
+	of.write((const char*)&p, sizeof(p));
 }
 
 Pokemon readPokemonFromBinary(std::istream& is)
 {
-    Pokemon p;
+	Pokemon p;
 
-    is.read((char*)&p, sizeof(Pokemon));
+	is.read((char*)&p, sizeof(p));
 
-    return p;
+	return p;
 }
 
 struct PokemonHandler
 {
-    const char* FileName;
+	const char* FileName;
 };
 
 PokemonHandler newPokemonHandler(const char* filename)
 {
-    PokemonHandler ph;
-    ph.FileName = "sorted.dat";
+	PokemonHandler ph;
 
-    std::ifstream ifs(filename, std::ios::binary | std::ios::in);
-    std::ofstream ofs(ph.FileName, std::ios::binary | std::ios::out);   
+	ph.FileName = filename;
 
-    Pokemon pokemon;
-    Pokemon previousPokemon;
+	return ph;
+}
 
-    bool first = true;
+int size(const PokemonHandler& ph)
+{
+	std::ifstream ifs(ph.FileName, std::ios::binary);
 
-    while (ifs)
-    {
-         pokemon = readPokemonFromBinary(ifs);
+	if (!ifs.is_open())
+	{
+		return -1;
+	}
 
-         writePokenomToBinary(pokemon, ofs);
+	ifs.seekg(0, std::ios::end);
 
-         if (!first && pokemon.Power < previousPokemon.Power)
-         {
-             ofs.seekp(-2 * sizeof(Pokemon), std::ios::cur);
-             writePokenomToBinary(previousPokemon, ofs);
-             ofs.write((const char*)&pokemon, sizeof(Pokemon));
-         }
+	return ifs.tellg() / sizeof(Pokemon);
+}
 
-         previousPokemon = pokemon;
-         first = false;
-    }
+Pokemon at(const PokemonHandler& ph, int i)
+{
+	std::ifstream ifs(ph.FileName, std::ios::binary);
 
-    ifs.close();
-    ofs.close();
+	if (!ifs.is_open() || i < 0 || i >= size(ph))
+	{
+		std::cerr << "An error occurred! " << std::endl;
+		return {};
+	}
 
-    return ph;
+	Pokemon soughtPokemon;
+
+	ifs.seekg(i * sizeof(Pokemon), std::ios::beg);
+
+	ifs.read((char*)&soughtPokemon, sizeof(Pokemon));
+
+	return soughtPokemon;
+}
+
+void swap(const PokemonHandler& ph, int i, int j)
+{
+	if (i < 0 || i >= size(ph) || j < 0 || j >= size(ph))
+	{
+		std::cerr << "An error occurred!" << std::endl;
+		return;
+	}
+
+	if (i == j)
+	{
+		return;
+	}
+
+	Pokemon pi = at(ph, i);
+	Pokemon pj = at(ph, j);
+
+	std::ofstream ofs(ph.FileName, std::ios::binary);
+
+	if (!ofs.is_open())
+	{
+		std::cerr << "An error occurred!" << std::endl;
+		return;
+	}
+
+	ofs.seekp(i * sizeof(Pokemon), std::ios::beg);
+
+	ofs.write((const char*)&pj, sizeof(Pokemon));
+	
+	ofs.seekp(j * sizeof(Pokemon), std::ios::beg);
+
+	ofs.write((const char*)&pi, sizeof(Pokemon));
+
+	ofs.close();
+}
+
+void insert(const PokemonHandler& ph, const Pokemon& pokemon)
+{
+	//first, we add the pokemon to the end of the file and then 
+	//swap it as many times as necessary 
+	//so the file is still sorted (insertion sort would work fine)
+
+	int initialSize = size(ph);
+
+	std::ofstream ofs(ph.FileName, std::ios::binary);
+
+	if (!ofs.is_open())
+	{
+		std::cerr << "An error occurred!" << std::endl;
+	}
+
+	ofs.seekp(0, std::ios::end);
+
+	ofs.write((const char*)&pokemon, sizeof(Pokemon));
+	
+	//insertion sort
+
+	int i = initialSize - 1;
+
+	while (i > 0 && pokemon.Power < at(ph, i).Power)
+	{
+		ofs.seekp((i + 1) * sizeof(Pokemon), std::ios::beg);
+
+		Pokemon temp = at(ph, i);
+		ofs.write((const char*)&temp, sizeof(Pokemon));
+		
+		i--;
+	}
+
+	ofs.seekp((i + 1) * sizeof(Pokemon), std::ios::beg);
+
+	ofs.write((const char*)&pokemon, sizeof(Pokemon));
+	ofs.close();
+}
+
+void textify(const PokemonHandler& ph, const char* filename)
+{
+	std::ifstream ifs(ph.FileName, std::ios::binary);
+
+	if (!ifs.is_open())
+	{
+		return;
+	}
+
+	std::ofstream ofs(filename);
+
+	if (!ofs.is_open())
+	{
+		return;
+	}
+
+	while (true)
+	{
+		Pokemon p = readPokemonFromBinary(ifs);
+
+		if (ifs.eof())
+		{
+			break;
+		}
+
+		writePokemon(p, ofs);
+	}
 }
 
 int main()
 {
-    Pokemon p1 = createPokenom("P1", e_Type::ELECTRIC, 800);
-    Pokemon p2 = createPokenom("P2", e_Type::ELECTRIC, 700);
-    Pokemon p3 = createPokenom("P3", e_Type::ELECTRIC, 100);
-    Pokemon p4 = createPokenom("P4", e_Type::ELECTRIC, 500);
+	PokemonHandler ph = newPokemonHandler("ph.dat");
 
-    std::ofstream ofs("pokemons.dat",
-        std::ios::binary | std::ios::out);
+	Pokemon p1 = createPokenom("P1", e_Type::GHOST, 400);
+	Pokemon p2 = createPokenom("P2", e_Type::FIRE, 600);
+	Pokemon p3 = createPokenom("P3", e_Type::GHOST, 620);
+	Pokemon p4 = createPokenom("P4", e_Type::GHOST, 700);
 
-    writePokenomToBinary(p1, ofs);
-    writePokenomToBinary(p2, ofs);
-    writePokenomToBinary(p3, ofs);
-    writePokenomToBinary(p4, ofs);
+	insert(ph, p1);
+	insert(ph, p2);
+	insert(ph, p3);
+	insert(ph, p4);
 
-    ofs.close();
-    PokemonHandler ph = newPokemonHandler("pokemons.dat");
+	Pokemon p5 = createPokenom("P5", e_Type::GHOST, 444);
 
-    std::ifstream ifs("sorted.dat", std::ios::binary | std::ios::in);
+	insert(ph, p5);
 
-    Pokemon Pokemons[4];
-
-    ifs.read((char*)Pokemons, 4 * sizeof(Pokemon));
-
-    for (int i = 0; i < 4; i++)
-    {
-        printPokemon(Pokemons[i]);
-    } 
-
-    ifs.close();
+	textify(ph, "pokemons.txt");
 }
-
-
