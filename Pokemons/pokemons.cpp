@@ -209,7 +209,7 @@ void swap(const PokemonHandler& ph, int i, int j)
 
 void textify(const PokemonHandler& ph, const char* filename)
 {
-	std::cout << ph.FileSize << std::endl;
+	//std::cout << ph.FileSize << std::endl;
 	std::ifstream ifs(ph.FileName, std::ios::binary | std::ios::in);
 
 	if (!ifs.is_open())
@@ -232,7 +232,7 @@ void textify(const PokemonHandler& ph, const char* filename)
 		writePokemon(p, std::cout);
 
 		//this does not work
-		if (ifs.eof())
+		if (!ifs)
 		{
 			break;
 		}
@@ -286,6 +286,35 @@ void insert(PokemonHandler& ph, const Pokemon& pokemon)
 	ofs.close();
 }
 
+void untextify(PokemonHandler& ph, const char* filename)
+{
+	std::ifstream ifs(filename);
+
+	if (!ifs.is_open())
+	{
+		return;
+	}
+
+	ph.FileSize = 0;
+	std::ofstream ofs(ph.FileName);
+	ofs.close();
+
+	while (true)
+	{
+		Pokemon p = readPokemon(ifs);
+
+		if (ifs.eof())
+		{
+			break;
+		}
+
+		insert(ph, p);
+	}
+
+	return;
+}
+
+
 int main()
 {
 	PokemonHandler ph = newPokemonHandler("ph.dat");
@@ -300,7 +329,7 @@ int main()
 	insert(ph, p3);
 	insert(ph, p4);
 
-	Pokemon p5 = createPokenom("P5", e_Type::GHOST, 444);
+	Pokemon p5 = createPokenom("P5", e_Type::GHOST, 444);	
 
 	insert(ph, p5);
 
