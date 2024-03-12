@@ -92,7 +92,7 @@ Pokemon readPokemonFromBinary(std::istream& is)
 {
 	Pokemon p;
 
-	is.read((char*)&p, sizeof(p));
+	is.read((char*)&p, sizeof(Pokemon));
 
 	return p;
 }
@@ -100,6 +100,13 @@ Pokemon readPokemonFromBinary(std::istream& is)
 struct PokemonHandler
 {
 	const char* FileName;
+
+	//it is a good idea to cache the size
+    //and increment it each time we insert a pokemon
+    //as we would use it quite often
+	int FileSize = 0;
+
+	std::fstream fs;
 };
 
 PokemonHandler newPokemonHandler(const char* filename)
@@ -108,10 +115,12 @@ PokemonHandler newPokemonHandler(const char* filename)
 
 	ph.FileName = filename;
 
+	ph.FileSize = 0;
+
 	return ph;
 }
 
-int size(const PokemonHandler& ph)
+int size(PokemonHandler& ph)
 {
 	std::ifstream ifs(ph.FileName, std::ios::binary);
 
@@ -122,14 +131,37 @@ int size(const PokemonHandler& ph)
 
 	ifs.seekg(0, std::ios::end);
 
-	return ifs.tellg() / sizeof(Pokemon);
+	int size = ifs.tellg() / sizeof(Pokemon);
+
+	ph.FileSize = size;
+
+	return size;
+}
+
+void setAt(int pos, const Pokemon& pok, std::ostream& os)
+{
+	if (pos < 0)
+	{
+		return;
+	}
+
+	os.seekp(pos * sizeof(Pokemon), std::ios::beg);
+
+	os.write((const char*)&pok, sizeof(Pokemon));
+}
+
+void readPokemonAt(int pos, Pokemon& pok, std::istream& is)
+{
+	is.seekg(pos * sizeof(Pokemon), std::ios::beg);
+
+	is.read((char*)&pok, sizeof(Pokemon));
 }
 
 Pokemon at(const PokemonHandler& ph, int i)
 {
-	std::ifstream ifs(ph.FileName, std::ios::binary);
+	std::ifstream ifs(ph.FileName, std::ios::binary | std::ios::in);
 
-	if (!ifs.is_open() || i < 0 || i >= size(ph))
+	if (!ifs.is_open() || i < 0 || i >= ph.FileSize)
 	{
 		std::cerr << "An error occurred! " << std::endl;
 		return {};
@@ -137,16 +169,16 @@ Pokemon at(const PokemonHandler& ph, int i)
 
 	Pokemon soughtPokemon;
 
-	ifs.seekg(i * sizeof(Pokemon), std::ios::beg);
+	readPokemonAt(i, soughtPokemon, ifs);
 
-	ifs.read((char*)&soughtPokemon, sizeof(Pokemon));
+	ifs.close();
 
 	return soughtPokemon;
 }
 
 void swap(const PokemonHandler& ph, int i, int j)
 {
-	if (i < 0 || i >= size(ph) || j < 0 || j >= size(ph))
+	if (i < 0 || i >= ph.FileSize || j < 0 || j >= ph.FileSize)
 	{
 		std::cerr << "An error occurred!" << std::endl;
 		return;
@@ -168,59 +200,17 @@ void swap(const PokemonHandler& ph, int i, int j)
 		return;
 	}
 
-	ofs.seekp(i * sizeof(Pokemon), std::ios::beg);
-
-	ofs.write((const char*)&pj, sizeof(Pokemon));
+	setAt(i, pj, ofs);
 	
-	ofs.seekp(j * sizeof(Pokemon), std::ios::beg);
+	setAt(j, pi, ofs);
 
-	ofs.write((const char*)&pi, sizeof(Pokemon));
-
-	ofs.close();
-}
-
-void insert(const PokemonHandler& ph, const Pokemon& pokemon)
-{
-	//first, we add the pokemon to the end of the file and then 
-	//swap it as many times as necessary 
-	//so the file is still sorted (insertion sort would work fine)
-
-	int initialSize = size(ph);
-
-	std::ofstream ofs(ph.FileName, std::ios::binary);
-
-	if (!ofs.is_open())
-	{
-		std::cerr << "An error occurred!" << std::endl;
-	}
-
-	ofs.seekp(0, std::ios::end);
-
-	ofs.write((const char*)&pokemon, sizeof(Pokemon));
-	
-	//insertion sort
-
-	int i = initialSize - 1;
-
-	while (i > 0 && pokemon.Power < at(ph, i).Power)
-	{
-		ofs.seekp((i + 1) * sizeof(Pokemon), std::ios::beg);
-
-		Pokemon temp = at(ph, i);
-		ofs.write((const char*)&temp, sizeof(Pokemon));
-		
-		i--;
-	}
-
-	ofs.seekp((i + 1) * sizeof(Pokemon), std::ios::beg);
-
-	ofs.write((const char*)&pokemon, sizeof(Pokemon));
 	ofs.close();
 }
 
 void textify(const PokemonHandler& ph, const char* filename)
 {
-	std::ifstream ifs(ph.FileName, std::ios::binary);
+	std::cout << ph.FileSize << std::endl;
+	std::ifstream ifs(ph.FileName, std::ios::binary | std::ios::in);
 
 	if (!ifs.is_open())
 	{
@@ -234,17 +224,66 @@ void textify(const PokemonHandler& ph, const char* filename)
 		return;
 	}
 
-	while (true)
+	int count = 0;
+	while (count < ph.FileSize)
 	{
 		Pokemon p = readPokemonFromBinary(ifs);
 
+		writePokemon(p, std::cout);
+
+		//this does not work
 		if (ifs.eof())
 		{
 			break;
 		}
 
 		writePokemon(p, ofs);
+		count++;
 	}
+}
+
+void findPokemonPos(int initialSize, 
+	const Pokemon& pokemon, 
+	const PokemonHandler& ph, 
+	std::ostream& ofs)
+{
+	int i = initialSize - 1;
+
+	while (i > 0 && pokemon.Power < at(ph, i).Power)
+	{
+		ofs.seekp((i + 1) * sizeof(Pokemon), std::ios::beg);
+
+		Pokemon temp = at(ph, i);
+		ofs.write((const char*)&temp, sizeof(Pokemon));
+
+		i--;
+	}
+
+	setAt(i + 1, pokemon, ofs);
+}
+
+void insert(PokemonHandler& ph, const Pokemon& pokemon)
+{
+	//first, we add the pokemon to the end of the file and then 
+	//find its place
+	//so the file is still sorted (insertion sort would work fine)
+
+	int initialSize = ph.FileSize;
+
+	std::ofstream ofs(ph.FileName, std::ios::binary | std::ios::in);
+
+	if (!ofs.is_open())
+	{
+		std::cerr << "An error occurred!" << std::endl;
+	}
+
+	setAt(initialSize * sizeof(Pokemon), pokemon, ofs);
+
+	ph.FileSize++;
+	
+	findPokemonPos(initialSize, pokemon, ph, ofs);
+
+	ofs.close();
 }
 
 int main()
