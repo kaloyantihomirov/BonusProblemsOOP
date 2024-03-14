@@ -105,8 +105,6 @@ struct PokemonHandler
     //and increment it each time we insert a pokemon
     //as we would use it quite often
 	int FileSize = 0;
-
-	std::fstream fs;
 };
 
 PokemonHandler newPokemonHandler(const char* filename)
